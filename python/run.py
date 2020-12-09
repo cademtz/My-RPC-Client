@@ -21,10 +21,10 @@ args.AddItem(NetString('pogree\ts..'))
 args.AddItem(NetFloat(4.200026699320269))
 client.RemoteCall('Say_IntString', args)
 client.Send(s)
-client.Recv(s)
+while client.Recv(s, asyncc=True) == None: pass
 client.RemoteCall('CloseServer')
 client.Send(s)
-client.Recv(s)
+while client.Recv(s, asyncc=True) == None: pass
 
 s.close()
 print('Finished running client')

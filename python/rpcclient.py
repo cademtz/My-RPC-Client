@@ -1,5 +1,6 @@
 import struct
 import sys
+import socket
 
 # I'm no python programmer, and this was whipped up overnight. It works nicely though!
 
@@ -26,6 +27,8 @@ class RpcClient():
     def __init__(self, remoteClass):
         self.klass = remoteClass
         self.calls = []
+        self._pending = bytes(b'')
+        self._hedr = None
     
     @staticmethod
     def HashString(somestr):
@@ -48,9 +51,11 @@ class RpcClient():
     def Send(self, sock):
         for call in self.calls:
             sock.sendall(call.PackArg())
+        self.calls = []
     
-    @staticmethod
-    def _ReadBytes(sock, Count):
+    def _ReadBytes(self, sock, Count):
+        self._pending = bytes(b'')
+
         buf = sock.recv(Count)
         while len(buf) < Count:
             moar = sock.recv(Count - len(buf))
@@ -58,15 +63,36 @@ class RpcClient():
                 return None
             buf += moar
         return buf
+    
+    def _TryReadBytes(self, sock, Count):
+        self._pending += sock.recv(Count - len(self._pending))
+        if len(self._pending) < Count:
+            return None
+        buf = self._pending
+        self._pending = bytes(b'')
+        return buf
+    
+    @staticmethod
+    def PeekHeader(sock):
+        buf = sock.recv(NETHEADER_SIZE, socket.MSG_PEEK)
+        if not buf or len(buf) != NETHEADER_SIZE:
+            return None
+        return NetArg.GetHeader(buf)
 
-    def Recv(self, sock):
+    def Recv(self, sock, asyncc=False):
+        hedr = self._hedr
+        if hedr == None:
+            if asyncc: hedr = self._hedr = RpcClient.PeekHeader(sock)
+            else: hedr = NetArg.GetHeader(self._ReadBytes(sock, NETHEADER_SIZE))
         
-        buf = RpcClient._ReadBytes(sock, NETHEADER_SIZE)
-        if not buf:
+        if hedr == None:
+            if asyncc:
+                return None
             print("RemoteClient.Recv() couldn't receive arg header!")
             return -1
         
-        hedr = NetArg.GetHeader(buf)
+        self._hedr = hedr
+        
         if hedr[NETHEADER_TYPE] != NetArgType_List:
             print('RemoteClient.Recv() expected ArgType.List ({}) but got {}!'
                 .format(NetArgType_List, hedr[NETHEADER_TYPE]))
@@ -78,12 +104,18 @@ class RpcClient():
                 .format(nextsize))
             return -1
         
-        nextbuf = RpcClient._ReadBytes(sock, nextsize)
-        if not nextbuf:
+        read = self._TryReadBytes if asyncc else self._ReadBytes
+        if asyncc:
+            nextsize += NETHEADER_SIZE
+        buf = read(sock, nextsize)
+        if not buf:
+            if asyncc:
+                return None
             print('RemoteClient.Recv() failed to recieve full arg!')
             return -1
 
-        buf += nextbuf
+        self._hedr = None
+
         args = NetArg.UnpackArg(buf)
         if not args:
             print('RemoteClient.Recv() failed to unpack arg!')
@@ -138,6 +170,8 @@ class NetArg():
 
     @staticmethod
     def GetHeader(Bytes, Off = 0):
+        if len(Bytes) - Off < NETHEADER_SIZE:
+            return None
         return struct.unpack(NETHEADER, Bytes[Off:Off + NETHEADER_SIZE])
     @staticmethod
     def GetPackedSize(hedr):

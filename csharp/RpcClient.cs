@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 
 namespace RpcClient
 {
@@ -44,15 +45,11 @@ namespace RpcClient
 		{
 			NetworkStream stream = m_tcp.GetStream();
 			int read = 0, pos = AlreadyRead;
-			try
+			do
 			{
-				do
-				{
-					read = stream.Read(Buffer, pos, Buffer.Length - pos);
-					pos += read;
-				} while (read > 0 && pos < Buffer.Length);
-			}
-			catch (System.IO.IOException e) { return false; }
+				read = stream.Read(Buffer, pos, Buffer.Length - pos);
+				pos += read;
+			} while (read > 0 && pos < Buffer.Length);
 
 			return pos == Buffer.Length;
 		}
@@ -65,74 +62,86 @@ namespace RpcClient
 		/// </returns>
 		public int Recv()
 		{
-			NetworkStream stream = m_tcp.GetStream();
-			byte[] buf = new byte[NetArg.HEADER_SIZE];
-
-			if (!ReadBytes(buf, 0))
+			try
 			{
-				//Console.WriteLine("RemoteClient.Recv() couldn't receive arg header!");
-				return -1;
+				NetworkStream stream = m_tcp.GetStream();
+				byte[] buf = new byte[NetArg.HEADER_SIZE];
+
+				if (!ReadBytes(buf, 0))
+				{
+					//Console.WriteLine("RemoteClient.Recv() couldn't receive arg header!");
+					return -1;
+				}
+
+				if ((ArgType)buf[0] != ArgType.List)
+				{
+					Console.WriteLine($"RemoteClient.Recv() expected ArgType.List ({(int)ArgType.List}) but got {buf[0]}!");
+					return -1;
+				}
+
+				int nextsize = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(buf, 1));
+				if (nextsize <= 0)
+				{
+					Console.WriteLine($"RemoteClient.Recv() recieved invalid size {nextsize}!");
+					return -1;
+				}
+
+				int pos = buf.Length, size = buf.Length + nextsize;
+				Array.Resize(ref buf, size);
+
+				if (!ReadBytes(buf, pos))
+				{
+					Console.WriteLine("RemoteClient.Recv() failed to recieve full arg!");
+					return -1;
+				}
+
+				int used;
+				NetArg arg = NetArg.UnpackArg(buf, 0, out used);
+				if (arg == null)
+				{
+					Console.WriteLine("RemoteClient.Recv() failed to unpack arg!");
+					return -1;
+				}
+
+				NetList args = arg as NetList;
+				if (args.value.Count < 1 || args.value[0].type != ArgType.Int)
+				{
+					Console.WriteLine("RemoteClient.Recv() expected function hash!");
+					return -1;
+				}
+
+				NetInt nethash = args.value[0] as NetInt;
+				UInt64 hash = unchecked((UInt64)nethash.value);
+
+				RemoteMethod meth = m_class.FindMethod(hash);
+				if (meth == null)
+				{
+					Console.WriteLine($"RemoteClient.Recv() failed to find function hash {hash}!");
+					return 1;
+				}
+
+				args.value.RemoveAt(0); // Lop off remote call header, leaving only method args
+				return meth.Call(args) == RemoteError.Ok ? 0 : 1; // RemoteMethod handles errors from here
 			}
-
-			if ((ArgType)buf[0] != ArgType.List)
-			{
-				Console.WriteLine($"RemoteClient.Recv() expected ArgType.List ({(int)ArgType.List}) but got {buf[0]}!");
-				return -1;
-			}
-
-			int nextsize = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(buf, 1));
-			if (nextsize <= 0)
-			{
-				Console.WriteLine($"RemoteClient.Recv() recieved invalid size {nextsize}!");
-				return -1;
-			}
-
-			int pos = buf.Length, size = buf.Length + nextsize;
-			Array.Resize(ref buf, size);
-
-			if (!ReadBytes(buf, pos))
-			{
-				Console.WriteLine("RemoteClient.Recv() failed to recieve full arg!");
-				return -1;
-			}
-
-			int used;
-			NetArg arg = NetArg.UnpackArg(buf, 0, out used);
-			if (arg == null)
-			{
-				Console.WriteLine("RemoteClient.Recv() failed to unpack arg!");
-				return -1;
-			}
-
-			NetList args = arg as NetList;
-			if (args.value.Count < 1 || args.value[0].type != ArgType.Int)
-			{
-				Console.WriteLine("RemoteClient.Recv() expected function hash!");
-				return -1;
-			}
-
-			NetInt nethash = args.value[0] as NetInt;
-			UInt64 hash = unchecked((UInt64)nethash.value);
-
-			RemoteMethod meth = m_class.FindMethod(hash);
-			if (meth == null)
-			{
-				Console.WriteLine($"RemoteClient.Recv() failed to find function hash {hash}!");
-				return 1;
-			}
-
-			args.value.RemoveAt(0); // Lop off remote call header, leaving only method args
-			return meth.Call(args) == RemoteError.Ok ? 0 : 1; // RemoteMethod handles errors from here
+			catch (Exception e) { Console.WriteLine(e); }
+			return -1;
 		}
 
 		// - Blocking call to flush all pending commands
 		public void Send()
 		{
-			NetworkStream stream = m_tcp.GetStream();
-			foreach (var call in m_calls)
+			try
 			{
-				byte[] buf = call.PackArg();
-				stream.Write(buf, 0, buf.Length);
+				NetworkStream stream = m_tcp.GetStream();
+				foreach (var call in m_calls)
+					stream.Write(call.PackArg());
+			}
+			catch (Exception e)
+			{
+				if (e is SocketException || e is System.IO.IOException)
+					Console.WriteLine(e);
+				else
+					throw;
 			}
 		}
 
