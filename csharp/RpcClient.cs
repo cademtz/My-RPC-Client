@@ -136,7 +136,7 @@ namespace RpcClient
 				foreach (var call in m_calls)
 				{
 					byte[] bytes = call.PackArg();
-					stream.Write(call.PackArg(), 0, bytes.Length);
+					stream.Write(bytes, 0, bytes.Length);
 				}
 			}
 			catch (Exception e)
