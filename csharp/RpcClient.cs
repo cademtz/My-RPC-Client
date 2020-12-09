@@ -134,7 +134,10 @@ namespace RpcClient
 			{
 				NetworkStream stream = m_tcp.GetStream();
 				foreach (var call in m_calls)
-					stream.Write(call.PackArg());
+				{
+					byte[] bytes = call.PackArg();
+					stream.Write(call.PackArg(), 0, bytes.Length);
+				}
 			}
 			catch (Exception e)
 			{
