@@ -32,26 +32,28 @@ namespace RpcClient
 		public volatile TcpClient m_tcp;
 		private volatile List<NetArg> m_calls;
 		private RemoteClass m_class;
+		private byte[] m_buf;
 
 		public RemoteClient(TcpClient Client, RemoteClass Klass)
 		{
 			m_tcp = Client;
 			m_calls = new List<NetArg>();
 			m_class = Klass;
+			m_buf = new byte[NetArg.HEADER_SIZE];
 		}
 
-		// - Returns true if the entire buffer was filled
-		private bool ReadBytes(byte[] Buffer, int AlreadyRead)
+		// - Returns true if 'Count' bytes were read
+		private bool ReadBytes(byte[] Buffer, int Off, int Count)
 		{
 			NetworkStream stream = m_tcp.GetStream();
-			int read = 0, pos = AlreadyRead;
+			int read = 0, pos = Off;
 			do
 			{
-				read = stream.Read(Buffer, pos, Buffer.Length - pos);
+				read = stream.Read(Buffer, pos, Count - (pos - Off));
 				pos += read;
-			} while (read > 0 && pos < Buffer.Length);
+			} while (read > 0 && pos < Off + Count);
 
-			return pos == Buffer.Length;
+			return pos == Off + Count;
 		}
 
 		/// <summary>
@@ -65,38 +67,38 @@ namespace RpcClient
 			try
 			{
 				NetworkStream stream = m_tcp.GetStream();
-				byte[] buf = new byte[NetArg.HEADER_SIZE];
 
-				if (!ReadBytes(buf, 0))
+				if (!ReadBytes(m_buf, 0, NetArg.HEADER_SIZE))
 				{
 					//Console.WriteLine("RemoteClient.Recv() couldn't receive arg header!");
 					return -1;
 				}
 
-				if ((ArgType)buf[0] != ArgType.List)
+				if ((ArgType)m_buf[0] != ArgType.List)
 				{
-					Console.WriteLine($"RemoteClient.Recv() expected ArgType.List ({(int)ArgType.List}) but got {buf[0]}!");
+					Console.WriteLine($"RemoteClient.Recv() expected ArgType.List ({(int)ArgType.List}) but got {m_buf[0]}!");
 					return -1;
 				}
 
-				int nextsize = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(buf, 1));
+				int nextsize = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(m_buf, 1));
 				if (nextsize <= 0)
 				{
 					Console.WriteLine($"RemoteClient.Recv() recieved invalid size {nextsize}!");
 					return -1;
 				}
 
-				int pos = buf.Length, size = buf.Length + nextsize;
-				Array.Resize(ref buf, size);
+				int pos = NetArg.HEADER_SIZE, size = m_buf.Length + nextsize;
+				if (m_buf.Length < size)
+					Array.Resize(ref m_buf, size);
 
-				if (!ReadBytes(buf, pos))
+				if (!ReadBytes(m_buf, pos, nextsize))
 				{
 					Console.WriteLine("RemoteClient.Recv() failed to recieve full arg!");
 					return -1;
 				}
 
 				int used;
-				NetArg arg = NetArg.UnpackArg(buf, 0, out used);
+				NetArg arg = NetArg.UnpackArg(m_buf, 0, out used);
 				if (arg == null)
 				{
 					Console.WriteLine("RemoteClient.Recv() failed to unpack arg!");
