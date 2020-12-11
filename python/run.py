@@ -16,15 +16,15 @@ klass.AddMethod('wazzap', 'sf', wazzap)
 client = RpcClient(klass)
 
 args = NetList()
-args.AddItem(NetInt(80085))
+args.AddItem(NetInt(50055))
 args.AddItem(NetString('pogree\ts..'))
-args.AddItem(NetFloat(4.200026699320269))
+args.AddItem(NetFloat(4.200026688320268))
 client.RemoteCall('Say_IntString', args)
 client.Send(s)
 client.Recv(s)
 client.RemoteCall('CloseServer')
 client.Send(s)
-client.Recv(s)
+while client.Recv(s) >= 0: pass
 
 s.close()
 print('Finished running client')
