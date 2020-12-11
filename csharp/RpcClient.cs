@@ -148,6 +148,8 @@ namespace RpcClient
 				else
 					throw;
 			}
+
+			m_calls.Clear();
 		}
 
 		public NetList RemoteCall(string Method, string FmtArgs, params object[] Args)

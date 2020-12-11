@@ -50,9 +50,11 @@ namespace csharp
 			{
 				TcpClient client = tcp.AcceptTcpClient();
 				RemoteClient remote = new RemoteClient(client, myclass);
+				double flLast = 0.5;
 				while (remote.Recv() >= 0)
 				{
-					remote.RemoteCall("wazzap", "sf", "String", 43.132897652777770001);
+					remote.RemoteCall("wazzap", "sf", $"String {flLast}", flLast);
+					flLast += 0.5;
 					remote.Send();
 				}
 				client.Close();
