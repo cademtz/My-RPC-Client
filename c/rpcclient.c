@@ -8,7 +8,7 @@
 #include <winsock2.h>
 #elif defined(__OpenBSD__)
 #include <sys/types.h>
-#define ntohs(x) betoh16(x)
+#define ntohs(x) betoh16
 #define ntohl(x) betoh32(x)
 #define ntohll(x) betoh64(x)
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -18,9 +18,16 @@
 #define ntohll(x) betoh64(x)
 #elif defined(__linux__)
 #include <endian.h>
-#define ntohs(x) betoh16(x)
-#define ntohl(x) betoh32(x)
-#define ntohll(x) betoh64(x)
+#define ntohs(x) be16toh(x)
+#define ntohl(x) be32toh(x)
+#define ntohll(x) be64toh(x)
+#define htons(x) htobe16(x)
+#define htonl(x) htobe32(x)
+#define htonll(x) htobe64(x)
+#endif
+
+#if !defined(WIN32)
+#define strcpy_s(dest, destz, src) strcpy(dest, src)
 #endif
 
 RemoteClass* _RpcClient_class = 0;

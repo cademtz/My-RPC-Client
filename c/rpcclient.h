@@ -1,6 +1,7 @@
 #pragma once
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 typedef struct _NetArg NetArg;
 typedef struct _NetInt NetInt;
@@ -106,10 +107,11 @@ uint64_t _RpcClient_HashString(const char* szStr);
 
 #ifdef _MSC_VER
 #pragma pack(push, 1)
+struct
 #else
-__attribute__((__packed__))
+struct __attribute__((__packed__))
 #endif
-struct _NetArgHeader
+	 _NetArgHeader
 {
 	char type;
 	NetBytes bytes;

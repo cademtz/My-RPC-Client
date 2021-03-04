@@ -7,8 +7,8 @@
 #pragma comment(lib, "Ws2_32.lib") // MSVC only, manually link if other compiler...
 typedef INT_PTR socket_t;
 #else
-#include <sys/socket>
-#include <arpa/inet.h> 
+#include <sys/socket.h>
+#include <arpa/inet.h>
 typedef int socket_t;
 #endif
 
@@ -41,7 +41,7 @@ int main()
 {
 	if ((sock = CreateSocket(HOST, PORT)) < 0)
 	{
-		puts("Failed to create socket\n");
+		puts("Failed to connect to server\n");
 		return -1;
 	}
 
@@ -49,7 +49,7 @@ int main()
 	RpcClient_AddMethod(&wazzap, "wazzap", "sf"); // Add method 'wazzap(string, float)' to client
 
 	// Call the server's 'Say_IntString(int, string, float)' method
-	RpcClient_Call("Say_IntString", "isf", 80085, "gANGSTA!", 4.200026688320268);
+	RpcClient_Call("Say_IntString", "isf", 23395, "gANGSTA!", 4.0000006288320268);
 	RpcClient_Recv(); // Wait for and process exactly one remote call from a peer
 	RpcClient_Call("CloseServer", 0);
 	RpcClient_Recv();
@@ -91,8 +91,10 @@ socket_t CreateSocket(const char* HostString, unsigned short Port)
 	socket_t sock;
 	if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
 	{
-		puts("Error creating socket\n");
+		printf("Error creating socket");
+#ifdef _WIN32
 		printf("socket() failed: %d\n", WSAGetLastError());
+#endif
 		return -1;
 	}
 
