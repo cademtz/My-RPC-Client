@@ -139,11 +139,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="rpcclient.h" />
+    <ClInclude Include="example.h" />
+    <ClInclude Include="include\rpcclient.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.c" />
-    <ClCompile Include="rpcclient.c" />
+    <ClCompile Include="example.c" />
+    <ClCompile Include="src\rpcclient.c" />
+    <ClCompile Include="example_server.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

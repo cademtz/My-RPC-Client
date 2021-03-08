@@ -1,33 +1,19 @@
-#include "rpcclient.h"
-#include <stdio.h>
+#include "example.h"
 
-#ifdef _WIN32
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-#pragma comment(lib, "Ws2_32.lib") // MSVC only, manually link if other compiler...
-typedef INT_PTR socket_t;
-#else
-#include <sys/socket.h>
-#include <arpa/inet.h>
-typedef int socket_t;
-#endif
-
-#define HOST "127.0.0.1"
-#define PORT 11223
-socket_t sock = 0;
-
+socket_t sock_main = -1;
 socket_t CreateSocket(const char* HostString, unsigned short Port);
+int srv_main();
 
 // - Example remote-callable method
-int wazzap(NetList* Args)
+int wazzap(const uint8_t* Args, int Len)
 {
-	NetString* str;
-	NetFloat* fl;
-	if (!NetList_GetArgs(Args, "sf", &str, &fl))
-		return RemoteError_BadArgsType;
+	const char* str;
+	float fl;
+	if (NetStruct_UnpackFmt(Args, Len, "sf", &str, &fl) <= 0)
+		return RpcCode_BadRemoteCall;
 
-	printf("wazzap(): '%s', %15.15f\n", str->s_value, fl->f_value);
-	return RemoteError_Ok;
+	printf("wazzap(): '%s', %15.15f\n", str, fl);
+	return RpcCode_Ok;
 }
 
 /*
@@ -37,22 +23,28 @@ int wazzap(NetList* Args)
 *	Try running the C# demo server, then open this client and watch them communicate!
 * 
 */
-int main()
+int main(int argc, char** argv)
 {
-	if ((sock = CreateSocket(HOST, PORT)) < 0)
+	if (argc < 2 || strcmp(argv[1], "-client"))
+		return srv_main();
+
+	puts("Running client example");
+	if ((sock_main = CreateSocket(HOST, PORT)) == -1)
 	{
-		puts("Failed to connect to server\n");
+		puts("Failed to connect to server");
 		return -1;
 	}
 
 	RpcClient_Open();
-	RpcClient_AddMethod(&wazzap, "wazzap", "sf"); // Add method 'wazzap(string, float)' to client
+	RpcClient_AddMethod(&wazzap, "wazzap"); // Add method 'wazzap(string, float)' to client
 
 	// Call the server's 'Say_IntString(int, string, float)' method
 	RpcClient_Call("Say_IntString", "isf", 23395, "gANGSTA!", 4.0000006288320268);
-	RpcClient_Recv(); // Wait for and process exactly one remote call from a peer
-	RpcClient_Call("CloseServer", 0);
+
+	// Wait for and process exactly one remote call from the server
 	RpcClient_Recv();
+
+	RpcClient_Close();
 
 	return 0;
 }
@@ -63,7 +55,7 @@ int RpcClient_Read_Impl(char* Buffer, int Len)
 	int read = 0;
 	while (read < Len)
 	{
-		int count = recv(sock, Buffer + read, Len - read, 0);
+		int count = recv(sock_main, Buffer + read, Len - read, 0);
 		if (count <= 0)
 			break;
 		read += count;
@@ -73,7 +65,7 @@ int RpcClient_Read_Impl(char* Buffer, int Len)
 
 // - Send RpcClient's buffer
 int RpcClient_Send_Impl(char* Buffer, int Len) {
-	return send(sock, Buffer, Len, 0);
+	return send(sock_main, Buffer, Len, 0);
 }
 
 socket_t CreateSocket(const char* HostString, unsigned short Port)
@@ -91,7 +83,7 @@ socket_t CreateSocket(const char* HostString, unsigned short Port)
 	socket_t sock;
 	if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
 	{
-		printf("Error creating socket");
+		puts("Error creating socket");
 #ifdef _WIN32
 		printf("socket() failed: %d\n", WSAGetLastError());
 #endif
@@ -104,13 +96,13 @@ socket_t CreateSocket(const char* HostString, unsigned short Port)
 
 	if (inet_pton(AF_INET, HOST, &addr.sin_addr) <= 0)
 	{
-		puts("Error converting string address \"" HOST "\"\n");
+		puts("Error converting string address \"" HOST "\"");
 		return -1;
 	}
 
 	if (connect(sock, &addr, sizeof(addr)) < 0)
 	{
-		puts("Error connecting socket\n");
+		puts("Error connecting socket");
 		return -1;
 	}
 

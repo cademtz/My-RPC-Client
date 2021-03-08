@@ -1,0 +1,3 @@
+[submodule "c/NetStruct"]
+	path = c/NetStruct
+	url = https://github.com/cademtz/NetStruct.git
