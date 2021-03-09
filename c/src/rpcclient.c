@@ -87,7 +87,7 @@ int RpcClient_Call(RpcClient* Client, const char* Method, const char* FmtArgs, .
 	}
 
 	total = argslen + hedrlen;
-	buf = _RpcClient_Alloc(total);
+	buf = (uint8_t*)_RpcClient_Alloc(total);
 	argsbuf = buf + hedrlen;
 
 	if (!buf)
@@ -105,7 +105,7 @@ int RpcClient_Call(RpcClient* Client, const char* Method, const char* FmtArgs, .
 
 	va_end(va);
 
-	if (RpcClient_Send_Impl(Client, buf, total) != total)
+	if (RpcClient_Send_Impl(Client, (char*)buf, total) != total)
 		return _RpcClient_Free(buf), RpcCode_InternalError;
 
 	_RpcClient_Free(buf);
@@ -140,7 +140,7 @@ int RpcClient_Recv(RpcClient* Client)
 		return RpcCode_BadRemoteCall;
 
 	buf = (uint8_t*)_RpcClient_Alloc(argslen);
-	if (!RpcClient_Read_Impl(Client, buf, argslen))
+	if (!RpcClient_Read_Impl(Client, (char*)buf, argslen))
 	{
 		RPCCLIENT_LOG("RpcClient_Recv() failed to receive call args");
 		return RpcCode_BadConnection;
