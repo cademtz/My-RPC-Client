@@ -114,7 +114,7 @@ int RpcClient_Recv()
 	if (!RpcClient_Read_Impl((char*)buf, _RpcClient_hedrlen))
 	{
 		RPCCLIENT_LOG("RpcClient_Recv() couldn't receive arg header");
-		return RpcCode_InternalError;
+		return RpcCode_BadConnection;
 	}
 
 	if (NetStruct_UnpackFmt(buf, buflen, "li", &hash, &argslen) <= 0 ||
@@ -132,7 +132,7 @@ int RpcClient_Recv()
 	if (!RpcClient_Read_Impl(buf, argslen))
 	{
 		RPCCLIENT_LOG("RpcClient_Recv() failed to receive call args");
-		return -1;
+		return RpcCode_BadConnection;
 	}
 
 	error = meth->call(buf, argslen);

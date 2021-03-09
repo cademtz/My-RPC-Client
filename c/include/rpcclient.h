@@ -9,6 +9,7 @@ enum ERemoteError
 	RpcCode_Ok,
 	RpcCode_BadCall,		// - Incorrect args or client was not set up correctly
 	RpcCode_BadRemoteCall,	// - Received bad data from peer
+	RpcCode_BadConnection,	// - Data failed to send or receive
 	RpcCode_InternalError,
 };
 

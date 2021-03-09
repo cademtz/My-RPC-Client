@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -30,16 +31,19 @@ namespace csharp
 			doListen = true;
 
 			RemoteClass myclass = new RemoteClass();
-			myclass.AddMethod("Say_IntString", "isf", args =>
+			myclass.AddMethod("Say_IntString", args =>
 			{
-				Int64 i = ((NetInt)args.value[0]).value;
-				string s = ((NetString)args.value[1]).value;
-				double f = ((NetFloat)args.value[2]).value;
+				List<object> list = NetStruct.UnpackFmt(args, 0, "isf");
+				if (list == null)
+					return false;
 
+				int i = (int)list[0];
+				string s = (string)list[1];
+				float f = (float)list[2];
 				Console.WriteLine($"Say_IntString(): {i}, '{s}', {f}");
 				return true;
 			});
-			myclass.AddMethod("CloseServer", "", args =>
+			myclass.AddMethod("CloseServer", args =>
 			{
 				Console.WriteLine("CloseServer(): Got request to close the server");
 				doListen = false;
@@ -51,7 +55,7 @@ namespace csharp
 				TcpClient client = tcp.AcceptTcpClient();
 				RemoteClient remote = new RemoteClient(client, myclass);
 				double flLast = 0.5;
-				while (remote.Recv() >= 0)
+				while (remote.Recv() == RpcCode.Ok)
 				{
 					remote.RemoteCall("wazzap", "sf", $"String {flLast}", flLast);
 					flLast += 0.5;
@@ -83,14 +87,18 @@ namespace csharp
 			}
 
 			RemoteClass myclass = new RemoteClass();
-			myclass.AddMethod("wazzap", "sf", args =>
+			myclass.AddMethod("wazzap", args =>
 			{
-				Console.WriteLine($"wazzap(): '{((NetString)args.value[0]).value}', '{((NetFloat)args.value[1]).value}'");
+				List<object> list = NetStruct.UnpackFmt(args, 0, "sf");
+				if (list == null)
+					return false;
+
+				Console.WriteLine($"wazzap(): '{(string)list[0]}', '{(float)list[1]}'");
 				return true;
 			});
 
 			RemoteClient client = new RemoteClient(tcp, myclass);
-			client.RemoteCall("Say_IntString", "isf", 80085, "gANGSTA!", 4.20002);
+			client.RemoteCall("Say_IntString", "isf", 010011, "gANGSTA!", (float)4.20002);
 			client.Send();
 			client.Recv();
 			client.RemoteCall("CloseServer", "");
