@@ -31,7 +31,7 @@ namespace csharp
 			doListen = true;
 
 			RemoteClass myclass = new RemoteClass();
-			myclass.AddMethod("Say_IntString", args =>
+			myclass.AddMethod("Say_IntString", (client, args) =>
 			{
 				List<object> list = NetStruct.UnpackFmt(args, 0, "isf");
 				if (list == null)
@@ -43,7 +43,7 @@ namespace csharp
 				Console.WriteLine($"Say_IntString(): {i}, '{s}', {f}");
 				return true;
 			});
-			myclass.AddMethod("CloseServer", args =>
+			myclass.AddMethod("CloseServer", (client, args) =>
 			{
 				Console.WriteLine("CloseServer(): Got request to close the server");
 				doListen = false;
@@ -87,7 +87,7 @@ namespace csharp
 			}
 
 			RemoteClass myclass = new RemoteClass();
-			myclass.AddMethod("wazzap", args =>
+			myclass.AddMethod("wazzap", (client, args) =>
 			{
 				List<object> list = NetStruct.UnpackFmt(args, 0, "sf");
 				if (list == null)

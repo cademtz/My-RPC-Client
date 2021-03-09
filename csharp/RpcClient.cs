@@ -90,7 +90,7 @@ namespace RpcClient
 					return RpcCode.BadConnection;
 				}
 
-				return meth.Call(buf) == RpcCode.Ok ? RpcCode.Ok : RpcCode.BadRemoteCall; // RemoteMethod handles errors from here*/
+				return meth.Call(this, buf) == RpcCode.Ok ? RpcCode.Ok : RpcCode.BadRemoteCall; // RemoteMethod handles errors from here*/
 			}
 			catch (Exception e) { Console.WriteLine(e); }
 			return RpcCode.InternalError;
@@ -157,17 +157,17 @@ namespace RpcClient
 	{
 		public string m_name { get; }
 		public UInt64 m_hash { get; }
-		Func<byte[], bool> m_meth { get; }
+		Func<RemoteClient, byte[], bool> m_meth { get; }
 
-		public RemoteMethod(string Name, Func<byte[], bool> Method)
+		public RemoteMethod(string Name, Func<RemoteClient, byte[], bool> Method)
 		{
 			m_name = Name;
 			m_hash = FNV1a.Hash(Name);
 			m_meth = Method;
 		}
 
-		public RpcCode Call(byte[] Args) {
-			return m_meth(Args) ? RpcCode.Ok : RpcCode.BadRemoteCall;
+		public RpcCode Call(RemoteClient Client, byte[] Args) {
+			return m_meth(Client, Args) ? RpcCode.Ok : RpcCode.BadRemoteCall;
 		}
 	}
 
@@ -179,7 +179,7 @@ namespace RpcClient
 			m_meths = new List<RemoteMethod>();
 		}
 
-		public void AddMethod(string Name, Func<byte[], bool> Method) {
+		public void AddMethod(string Name, Func<RemoteClient, byte[], bool> Method) {
 			m_meths.Add(new RemoteMethod(Name, Method));
 		}
 		public RemoteMethod FindHash(UInt64 Hash) {
