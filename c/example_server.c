@@ -1,9 +1,8 @@
 #include "example.h"
 
-socket_t sock_srv = -1;
 socket_t CreateListener(unsigned short Port);
 
-int Say_IntString(const uint8_t* Args, int Len)
+int Say_IntString(RpcClient* Client, const uint8_t* Args, int Len)
 {
 	int i;
 	const char* str;
@@ -19,15 +18,19 @@ int srv_main()
 {
 	puts("Running server example");
 
-	if ((sock_srv = CreateListener(PORT)) == -1)
+	socket_t sock_listen, sock_client;
+	RpcClient client;
+	RemoteClass klass;
+
+	if ((sock_listen = CreateListener(PORT)) == -1)
 	{
 		puts("Failed to create listener");
 		return -1;
 	}
 	puts("Created listener");
 	
-	RpcClient_Open();
-	RpcClient_AddMethod(&Say_IntString, "Say_IntString");
+	RemoteClass_Create(&klass);
+	RemoteClass_AddMethod(&klass, &Say_IntString, "Say_IntString");
 
 	struct sockaddr_in addr = { 0 };
 	addr.sin_family = AF_INET;
@@ -37,18 +40,20 @@ int srv_main()
 	size_t addrlen = sizeof(addr);
 	while (1)
 	{
-		sock_main = accept(sock_srv, &addr, &addrlen);
-		if (sock_main == -1 || sock_main < 0)
+		sock_client = accept(sock_listen, &addr, &addrlen);
+		if (sock_client == -1 || sock_client < 0)
 			break;
 
 		puts("Accepted client");
-		RpcClient_Recv();
+		RpcClient_Create(&client, &klass, (void*)sock_client);
+		RpcClient_Recv(&client);
 
-		RpcClient_Call("wazzap", "sf",  "TestString", 0.15);
-		closesocket(sock_main);
+		RpcClient_Call(&client, "wazzap", "sf",  "TestString", 0.15);
+		closesocket(sock_client);
 	}
 
-	RpcClient_Close();
+	RemoteClass_Destroy(&klass);
+
 	puts("Closing server");
 	return 0;
 }

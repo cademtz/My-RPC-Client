@@ -1,11 +1,10 @@
 #include "example.h"
 
-socket_t sock_main = -1;
 socket_t CreateSocket(const char* HostString, unsigned short Port);
 int srv_main();
 
 // - Example remote-callable method
-int wazzap(const uint8_t* Args, int Len)
+int wazzap(RpcClient* Client, const uint8_t* Args, int Len)
 {
 	const char* str;
 	float fl;
@@ -28,34 +27,41 @@ int main(int argc, char** argv)
 	if (argc < 2 || strcmp(argv[1], "-client"))
 		return srv_main();
 
+	RpcClient client;
+	RemoteClass klass;
+	socket_t sock;
+
 	puts("Running client example");
-	if ((sock_main = CreateSocket(HOST, PORT)) == -1)
+	if ((sock = CreateSocket(HOST, PORT)) == -1)
 	{
 		puts("Failed to connect to server");
 		return -1;
 	}
 
-	RpcClient_Open();
-	RpcClient_AddMethod(&wazzap, "wazzap"); // Add method 'wazzap(string, float)' to client
+	RemoteClass_Create(&klass);
+	RemoteClass_AddMethod(&klass, &wazzap, "wazzap"); // Add method with name 'wazzap'
+	
+	RpcClient_Create(&client, &klass, (void*)sock); // Give our RPC client a socket and class
 
-	// Call the server's 'Say_IntString(int, string, float)' method
-	RpcClient_Call("Say_IntString", "isf", 23395, "gANGSTA!", 4.0000006288320268);
+	// Call server's 'Say_IntString' method using format: function(int, string, float)
+	RpcClient_Call(&client, "Say_IntString", "isf", 23395, "gANGSTA!", 4.0000006288320268);
 
-	// Wait for and process exactly one remote call from the server
-	RpcClient_Recv();
+	RpcClient_Recv(&client); // Wait until server calls one of our methods (Can be done in other thread)
 
-	RpcClient_Close();
+	RpcClient_Destroy(&client);
+	RemoteClass_Destroy(&klass);
 
+	puts("Closing client");
 	return 0;
 }
 
-// - Fill 'Len' bytes into RpcClient's buffer, or return false
-int RpcClient_Read_Impl(char* Buffer, int Len)
+// - Fill 'Len' bytes in RpcClient's buffer, or return false
+int RpcClient_Read_Impl(RpcClient* Client, char* Buffer, int Len)
 {
 	int read = 0;
 	while (read < Len)
 	{
-		int count = recv(sock_main, Buffer + read, Len - read, 0);
+		int count = recv((socket_t)Client->socket, Buffer + read, Len - read, 0);
 		if (count <= 0)
 			break;
 		read += count;
@@ -64,8 +70,8 @@ int RpcClient_Read_Impl(char* Buffer, int Len)
 }
 
 // - Send RpcClient's buffer
-int RpcClient_Send_Impl(char* Buffer, int Len) {
-	return send(sock_main, Buffer, Len, 0);
+int RpcClient_Send_Impl(RpcClient* Client, char* Buffer, int Len) {
+	return send((socket_t)Client->socket, Buffer, Len, 0);
 }
 
 socket_t CreateSocket(const char* HostString, unsigned short Port)

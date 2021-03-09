@@ -7,6 +7,9 @@
 
 #include "../NetStruct/src/netstruct.c" // Build with netstruct
 
+#define _RPCCLIENT_HEADERLEN (sizeof(int64_t) + sizeof(int))
+#define _RPCCLIENT_HEADER "li"
+
 #define RPCCLIENT_LOG_FMT(Fmt, ...) printf("[RpcClient]: " Fmt "\n", __VA_ARGS__)
 #define RPCCLIENT_LOG(Msg) puts("[RpcClient]: " Msg)
 
@@ -17,41 +20,56 @@
 void* _RpcClient_Alloc(size_t Size) { return malloc(Size); }
 void _RpcClient_Free(void* Memory) { return free(Memory); }
 
-RemoteClass* _RpcClient_class = 0;
-int _RpcClient_hedrlen = 0;
-
-void RpcClient_Open()
+void RpcClient_Create(RpcClient* Client, const RemoteClass* Class, void* Socket)
 {
-	_RpcClient_class = (RemoteClass*)_RpcClient_Alloc(sizeof(*_RpcClient_class));
-	memset(_RpcClient_class, 0, sizeof(*_RpcClient_class));
-
-	_RpcClient_hedrlen = NetStruct_FmtLen("li", (int16_t)0, (int)0);
-	assert(_RpcClient_hedrlen > 0);
+	memset(Client, 0, sizeof(*Client));
+	Client->klass = Class;
+	Client->socket = Socket;
 }
 
-void RpcClient_Close()
+void RpcClient_Destroy(RpcClient* Client) { }
+
+void RemoteClass_Create(RemoteClass* Class) {
+	memset(Class, 0, sizeof(*Class));
+}
+
+void RemoteClass_Destroy(RemoteClass* Class)
 {
-	for (RemoteMethod* meth = _RpcClient_class->head; meth;)
+	for (RemoteMethod* meth = Class->head; meth;)
 	{
 		RemoteMethod* next = meth->next;
 		_RpcClient_Free(meth->name);
 		_RpcClient_Free(meth);
 		meth = next;
 	}
-	_RpcClient_Free(_RpcClient_class);
-	_RpcClient_class = 0;
 }
 
-int RpcClient_Call(const char* Method, const char* FmtArgs, ...)
+void RemoteClass_AddMethod(RemoteClass* Class, RpcClient_Callback Callback, const char* Name)
+{
+	size_t slen = strlen(Name) + 1;
+	RemoteMethod* meth = (RemoteMethod*)_RpcClient_Alloc(sizeof(*meth));
+
+	memset(meth, 0, sizeof(*meth));
+
+	meth->hash = _RpcClient_HashString(Name);
+	meth->call = Callback;
+	meth->name = (char*)_RpcClient_Alloc(slen);
+	memcpy(meth->name, Name, slen);
+
+	if (!Class->head)
+		Class->head = Class->tail = meth;
+	else
+		Class->tail->next = meth;
+	Class->count++;
+}
+
+int RpcClient_Call(RpcClient* Client, const char* Method, const char* FmtArgs, ...)
 {
 	va_list va;
 	uint8_t* argsbuf, * buf;
 	int	argslen = 0, total;
-	int	hedrlen = _RpcClient_hedrlen; // Hash, len
+	int	hedrlen = _RPCCLIENT_HEADERLEN;
 	uint64_t hash = _RpcClient_HashString(Method);
-
-	if (hedrlen <= 0)
-		return RpcCode_InternalError;
 
 	if (FmtArgs)
 	{
@@ -87,16 +105,16 @@ int RpcClient_Call(const char* Method, const char* FmtArgs, ...)
 
 	va_end(va);
 
-	if (RpcClient_Send_Impl(buf, total) != total)
+	if (RpcClient_Send_Impl(Client, buf, total) != total)
 		return _RpcClient_Free(buf), RpcCode_InternalError;
 
 	_RpcClient_Free(buf);
 	return 0;
 }
 
-int RpcClient_Recv()
+int RpcClient_Recv(RpcClient* Client)
 {
-	uint8_t _stack[16];
+	uint8_t _stack[_RPCCLIENT_HEADERLEN];
 	uint8_t* buf = _stack;
 	int buflen = sizeof(_stack);
 	int argslen;
@@ -104,24 +122,17 @@ int RpcClient_Recv()
 	uint64_t hash;
 	RemoteMethod* meth;
 
-	assert(_RpcClient_class && "RpcClient_Recv: Call RpcClient_Open() before using any other methods");
-
-	if (!_RpcClient_class)
-		return RpcCode_BadCall;
-	if (_RpcClient_hedrlen <= 0 || buflen < _RpcClient_hedrlen)
-		return RpcCode_InternalError;
-
-	if (!RpcClient_Read_Impl((char*)buf, _RpcClient_hedrlen))
+	if (!RpcClient_Read_Impl(Client, (char*)buf, _RPCCLIENT_HEADERLEN))
 	{
 		RPCCLIENT_LOG("RpcClient_Recv() couldn't receive arg header");
 		return RpcCode_BadConnection;
 	}
 
-	if (NetStruct_UnpackFmt(buf, buflen, "li", &hash, &argslen) <= 0 ||
+	if (NetStruct_UnpackFmt(buf, buflen, _RPCCLIENT_HEADER, &hash, &argslen) <= 0 ||
 		argslen <= 0)
 		return RpcCode_BadRemoteCall;
 
-	for (meth = _RpcClient_class->head; meth; meth = meth->next)
+	for (meth = Client->klass->head; meth; meth = meth->next)
 		if (meth->hash == hash) // Find method by hash
 			break;
 
@@ -129,39 +140,18 @@ int RpcClient_Recv()
 		return RpcCode_BadRemoteCall;
 
 	buf = (uint8_t*)_RpcClient_Alloc(argslen);
-	if (!RpcClient_Read_Impl(buf, argslen))
+	if (!RpcClient_Read_Impl(Client, buf, argslen))
 	{
 		RPCCLIENT_LOG("RpcClient_Recv() failed to receive call args");
 		return RpcCode_BadConnection;
 	}
 
-	error = meth->call(buf, argslen);
+	error = meth->call(Client, buf, argslen);
 	if (error != RpcCode_Ok)
 		error = RpcCode_BadRemoteCall;
 
 	_RpcClient_Free(buf);
 	return error;
-}
-
-void RpcClient_AddMethod(RpcClient_Callback Callback, const char* Name)
-{
-	assert(_RpcClient_class && "RpcClient_Recv: Call RpcClient_Open() before using any other methods");
-
-	size_t slen = strlen(Name) + 1;
-	RemoteMethod* meth = (RemoteMethod*)_RpcClient_Alloc(sizeof(*meth));
-
-	memset(meth, 0, sizeof(*meth));
-
-	meth->hash = _RpcClient_HashString(Name);
-	meth->call = Callback;
-	meth->name = (char*)_RpcClient_Alloc(slen);
-	memcpy(meth->name, Name, slen);
-
-	if (!_RpcClient_class->head)
-		_RpcClient_class->head = _RpcClient_class->tail = meth;
-	else
-		_RpcClient_class->tail->next = meth;
-	_RpcClient_class->count++;
 }
 
 uint64_t _RpcClient_HashString(const char* szStr)

@@ -17,5 +17,3 @@
 
 #define HOST "127.0.0.1"
 #define PORT 11223
-
-extern socket_t sock_main;

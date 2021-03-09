@@ -2,7 +2,9 @@
 #include <stdint.h>
 #include "../NetStruct/include/netstruct.h"
 
-typedef int(*RpcClient_Callback)(const uint8_t* Args, int Len);
+typedef struct _remoteclass RemoteClass;
+typedef struct _rpcclient RpcClient;
+typedef int(*RpcClient_Callback)(RpcClient* Client, const uint8_t* Args, int Len);
 
 enum ERemoteError
 {
@@ -13,17 +15,20 @@ enum ERemoteError
 	RpcCode_InternalError,
 };
 
-void RpcClient_Open(void); // - Initialize necessary RPC Client variables
-void RpcClient_Close(void); // - Clean up RPC Client variables
+void RpcClient_Create(RpcClient* Client, const RemoteClass* Class, void* Socket);
+void RpcClient_Destroy(RpcClient* Client);
 
-int RpcClient_Call(const char* Method, const char* FmtArgs, ...);
-int RpcClient_Recv(void);
-void RpcClient_AddMethod(RpcClient_Callback Callback, const char* Name);
+void RemoteClass_Create(RemoteClass* Class);
+void RemoteClass_Destroy(RemoteClass* Class);
+void RemoteClass_AddMethod(RemoteClass* Class, RpcClient_Callback Callback, const char* Name);
 
-// - Must fill 'Buffer' up to 'Len' bytes
+int RpcClient_Call(RpcClient* Client, const char* Method, const char* FmtArgs, ...);
+int RpcClient_Recv(RpcClient* Client);
+
+// - Block until 'Len' bytes are read to 'Buffer'
 // - Return 0 if no more data is available from the connection
-extern int RpcClient_Read_Impl(char* Buffer, int Len);
-extern int RpcClient_Send_Impl(char* Buffer, int Len);
+extern int RpcClient_Read_Impl(RpcClient* Client, char* Buffer, int Len);
+extern int RpcClient_Send_Impl(RpcClient* Client, char* Buffer, int Len);
 
 uint64_t _RpcClient_HashString(const char* szStr);
 
@@ -40,3 +45,9 @@ typedef struct _remoteclass
 	RemoteMethod* head, * tail;
 	int count;
 } RemoteClass;
+
+typedef struct _rpcclient
+{
+	const RemoteClass* klass;
+	void* socket;
+} RpcClient;
