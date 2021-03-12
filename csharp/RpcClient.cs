@@ -49,18 +49,22 @@ namespace RpcClient
 		/// - Blocking call to receive and run the next command
 		/// </summary>
 		/// <returns>
-		/// - Return == 0 on success, < 0 if stream data is invalid, or > 0 if the client made a bad call
+		/// <see cref="RpcCode.Ok"/>: A call was received and executed
+		/// <br><see cref="RpcCode.BadRemoteCall"/>: Bad data (Wrong protocol, calling unknown function)</br>
+		/// <br><see cref="RpcCode.BadConnection"/>: Couldn't receive data. Socket was likely terminated</br>
+		/// <br><see cref="RpcCode.InternalError"/>: Exception was thrown while receiving data</br>
 		/// </returns>
 		public RpcCode Recv()
 		{
+			RemoteMethod meth = null;
+			UInt64 hash;
+			int argslen;
+			List<object> list;
+			NetworkStream stream = m_tcp.GetStream();
+			byte[] buf = new byte[m_hedrsize];
+
 			try
 			{
-				UInt64 hash;
-				int argslen;
-				List<object> list;
-				NetworkStream stream = m_tcp.GetStream();
-				byte[] buf = new byte[m_hedrsize];
-
 				if (!ReadBytes(buf, 0, buf.Length))
 				{
 					Console.WriteLine("RemoteClient.Recv() couldn't receive arg header");
@@ -76,7 +80,7 @@ namespace RpcClient
 				if (argslen < 0)
 					return RpcCode.BadRemoteCall;
 
-				RemoteMethod meth = m_class.FindHash(hash);
+				meth = m_class.FindHash(hash);
 				if (meth == null)
 				{
 					Console.WriteLine($"RemoteClient.Recv() failed to find function hash 0x{hash.ToString("X")}!");
@@ -90,10 +94,10 @@ namespace RpcClient
 					return RpcCode.BadConnection;
 				}
 
-				return meth.Call(this, buf) == RpcCode.Ok ? RpcCode.Ok : RpcCode.BadRemoteCall; // RemoteMethod handles errors from here*/
-			}
-			catch (Exception e) { Console.WriteLine(e); }
-			return RpcCode.InternalError;
+			} catch (Exception) { return RpcCode.InternalError; }
+
+			meth.Call(this, buf);
+			return RpcCode.Ok;
 		}
 
 		// - Blocking call to flush all pending commands

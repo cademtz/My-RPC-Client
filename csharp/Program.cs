@@ -61,6 +61,7 @@ namespace csharp
 					flLast += 0.5;
 					remote.Send();
 				}
+				doListen = false;
 				client.Close();
 			} while (doListen);
 
