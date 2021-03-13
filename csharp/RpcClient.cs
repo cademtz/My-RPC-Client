@@ -123,34 +123,35 @@ namespace RpcClient
 
 		public bool RemoteCall(string Method, string FmtArgs, params object[] Args)
 		{
-			UInt64 hash = FNV1a.Hash(Method);
-			int argslen = NetStruct.FmtLen(FmtArgs, Args);
-			byte[] buf;
-			int len;
-
-			if (argslen < 0)
+			byte[] args = null;
+			if (FmtArgs != null && FmtArgs.Length > 0 &&
+				(args = NetStruct.PackFmt(FmtArgs, Args)) == null)
 			{
-				throw new ArgumentException($"Failed to format '{FmtArgs}' in call to '{Method}'");
+				Console.WriteLine($"RemoteClient.RemoteCall() failed to pack args '{FmtArgs}'");
 				return false;
 			}
 
-			buf = new byte[m_hedrsize + argslen];
-			len = NetStruct.PackFmtBuffer(buf, 0, "li", unchecked((Int64)hash), argslen);
+			return RemoteCall(Method, args);
+		}
 
-			if (len != m_hedrsize)
+		public bool RemoteCall(string Method, byte[] Args)
+		{
+			UInt64 hash = FNV1a.Hash(Method);
+			byte[] buf;
+			int hedrlen;
+			int argslen = Args == null ? 0 : Args.Length;
+
+			buf = new byte[m_hedrsize + argslen];
+			hedrlen = NetStruct.PackFmtBuffer(buf, 0, "li", unchecked((Int64)hash), argslen);
+
+			if (hedrlen != m_hedrsize)
 			{
 				Console.WriteLine($"RemoteClient.RemoteCall() internal error");
 				return false;
 			}
 
 			if (argslen > 0)
-			{
-				if (NetStruct.PackFmtBuffer(buf, len, FmtArgs, Args) < 0)
-				{
-					Console.WriteLine($"RemoteClient.RemoteCall() failed to pack args '{FmtArgs}'");
-					return false;
-				}
-			}
+				Array.Copy(Args, 0, buf, hedrlen, argslen);
 
 			m_calls.Add(buf);
 			return true;
